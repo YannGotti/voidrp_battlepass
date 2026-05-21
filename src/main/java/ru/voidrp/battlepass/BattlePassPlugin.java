@@ -72,7 +72,8 @@ public final class BattlePassPlugin extends JavaPlugin {
         }
 
         // ── GUI ───────────────────────────────────────────────────────────────
-        BattlePassGui battlePassGui = new BattlePassGui(storage, premiumStorage, seasonRewards, economy);
+        String seasonDisplayName = getConfig().getString("season-name", Season.currentKey());
+        BattlePassGui battlePassGui = new BattlePassGui(storage, premiumStorage, seasonRewards, economy, seasonDisplayName);
         BpQuestGui questGui = new BpQuestGui(questStorage, premiumStorage);
 
         // ── Listeners ─────────────────────────────────────────────────────────

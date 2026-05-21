@@ -34,13 +34,15 @@ public final class BattlePassGui {
     private final PremiumStorage premiumStorage;
     private final SeasonRewards seasonRewards;
     private final Economy economy;
+    private final String seasonDisplayName;
 
     public BattlePassGui(BattlePassStorage storage, PremiumStorage premiumStorage,
-                         SeasonRewards seasonRewards, Economy economy) {
+                         SeasonRewards seasonRewards, Economy economy, String seasonDisplayName) {
         this.storage = storage;
         this.premiumStorage = premiumStorage;
         this.seasonRewards = seasonRewards;
         this.economy = economy;
+        this.seasonDisplayName = seasonDisplayName;
     }
 
     public void open(Player player) {
@@ -49,29 +51,35 @@ public final class BattlePassGui {
     }
 
     public void open(Player player, int page) {
-        String season = Season.currentKey();
-        String title = "§6§l✦ Battle Pass — §e" + season;
+        String title = "§6§l✦ Battle Pass §7— §e" + seasonDisplayName;
         Inventory inv = Bukkit.createInventory(null, 54, title);
 
         BattlePassData data = storage.get(player.getUniqueId());
         boolean hasPremium = premiumStorage.hasPremium(player.getUniqueId());
-        int totalPages = (int) Math.ceil((double) TOTAL_LEVELS / LEVELS_PER_PAGE); // 14 pages (0..13)
+        int totalPages = (int) Math.ceil((double) TOTAL_LEVELS / LEVELS_PER_PAGE);
         int clampedPage = Math.max(0, Math.min(page, totalPages - 1));
         PLAYER_PAGE.put(player.getUniqueId(), clampedPage);
 
         int firstLevel = clampedPage * LEVELS_PER_PAGE + 1;
         int lastLevel = Math.min(firstLevel + LEVELS_PER_PAGE - 1, TOTAL_LEVELS);
 
-        // ── Row 0: navigation & info ──────────────────────────────────────────
+        // ── Row 0: season info (0-2), XP info (3-5), premium status (6-8) ──────
 
-        // Slot 0: prev page
-        if (clampedPage > 0) {
-            inv.setItem(0, named(Material.ARROW, "§7◄ Назад"));
-        } else {
-            inv.setItem(0, named(Material.GRAY_STAINED_GLASS_PANE, "§7◄ Назад"));
-        }
+        // Slots 0-2: Season display
+        String season = Season.currentKey();
+        ItemStack seasonItem = new ItemStack(Material.CLOCK);
+        ItemMeta seasonMeta = seasonItem.getItemMeta();
+        seasonMeta.setDisplayName("§6✦ " + seasonDisplayName);
+        List<String> seasonLore = new ArrayList<>();
+        seasonLore.add("§7Сезон: §e" + season);
+        seasonLore.add("§7До сброса: §e" + Season.daysUntilReset() + " §7дн.");
+        seasonMeta.setLore(seasonLore);
+        seasonItem.setItemMeta(seasonMeta);
+        inv.setItem(0, seasonItem);
+        inv.setItem(1, seasonItem.clone());
+        inv.setItem(2, seasonItem.clone());
 
-        // Slots 1-3: XP info
+        // Slots 3-5: XP info
         int level = data.getLevel();
         long xpInLevel = data.xpInCurrentLevel();
         long toNext = data.xpToNextLevel();
@@ -89,21 +97,11 @@ public final class BattlePassGui {
         }
         xpMeta.setLore(xpLore);
         xpItem.setItemMeta(xpMeta);
-        inv.setItem(1, xpItem);
-        inv.setItem(2, xpItem.clone());
-        inv.setItem(3, xpItem.clone());
+        inv.setItem(3, xpItem);
+        inv.setItem(4, xpItem.clone());
+        inv.setItem(5, xpItem.clone());
 
-        // Slot 4: Season info
-        ItemStack seasonItem = new ItemStack(Material.CLOCK);
-        ItemMeta seasonMeta = seasonItem.getItemMeta();
-        seasonMeta.setDisplayName("§6Сезон §e" + season);
-        List<String> seasonLore = new ArrayList<>();
-        seasonLore.add("§7До сброса: §e" + Season.daysUntilReset() + " §7дн.");
-        seasonMeta.setLore(seasonLore);
-        seasonItem.setItemMeta(seasonMeta);
-        inv.setItem(4, seasonItem);
-
-        // Slots 5-7: Premium status
+        // Slots 6-8: Premium status
         Material premMat = hasPremium ? Material.DIAMOND : Material.IRON_INGOT;
         ItemStack premItem = new ItemStack(premMat);
         ItemMeta premMeta = premItem.getItemMeta();
@@ -122,29 +120,24 @@ public final class BattlePassGui {
             premMeta.setDisplayName(wasActive ? "§c§lPremium истёк" : "§7Нет Premium");
             List<String> premLore = new ArrayList<>();
             if (wasActive) {
-                String expiryStr = java.time.Instant.ofEpochMilli(expiry)
-                        .atZone(java.time.ZoneId.systemDefault())
-                        .format(java.time.format.DateTimeFormatter.ofPattern("dd.MM.yyyy"));
+                String expiryStr = Instant.ofEpochMilli(expiry)
+                        .atZone(ZoneId.systemDefault())
+                        .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
                 premLore.add("§7Истёк: §c" + expiryStr);
                 premLore.add("§7Уже полученные награды сохранены.");
-                premLore.add("§7Продлите Premium для продолжения.");
             } else {
                 premLore.add("§7Приобретите Premium для доступа");
                 premLore.add("§7к дополнительным наградам!");
             }
+            premLore.add(" ");
+            premLore.add("§e§lНажмите §eдля покупки Premium");
+            premLore.add("§7→ §bvoid-rp.ru/shop");
             premMeta.setLore(premLore);
         }
         premItem.setItemMeta(premMeta);
-        inv.setItem(5, premItem);
-        inv.setItem(6, premItem.clone());
+        inv.setItem(6, premItem);
         inv.setItem(7, premItem.clone());
-
-        // Slot 8: next page
-        if (clampedPage < totalPages - 1) {
-            inv.setItem(8, named(Material.ARROW, "§7Вперёд ►"));
-        } else {
-            inv.setItem(8, named(Material.GRAY_STAINED_GLASS_PANE, "§7Вперёд ►"));
-        }
+        inv.setItem(8, premItem.clone());
 
         // ── Rows 1-3: level content ───────────────────────────────────────────
         int playerLevel = data.getLevel();
@@ -171,8 +164,7 @@ public final class BattlePassGui {
             if (freeReward != null) {
                 boolean reachable = playerLevel >= lvl;
                 boolean claimed = data.isFreeClaimed(lvl);
-                ItemStack rewardItem = buildRewardItem(freeReward, lvl, reachable, claimed, false);
-                inv.setItem(18 + i, rewardItem);
+                inv.setItem(18 + i, buildRewardItem(freeReward, lvl, reachable, claimed, false));
             } else {
                 inv.setItem(18 + i, named(Material.GRAY_STAINED_GLASS_PANE, "§8—"));
             }
@@ -183,8 +175,7 @@ public final class BattlePassGui {
                 boolean reachable = playerLevel >= lvl;
                 boolean claimed = data.isPremiumClaimed(lvl);
                 if (hasPremium || claimed) {
-                    ItemStack rewardItem = buildRewardItem(premReward, lvl, reachable, claimed, true);
-                    inv.setItem(27 + i, rewardItem);
+                    inv.setItem(27 + i, buildRewardItem(premReward, lvl, reachable, claimed, true));
                 } else {
                     ItemStack locked = new ItemStack(Material.RED_STAINED_GLASS_PANE);
                     ItemMeta lm = locked.getItemMeta();
@@ -205,24 +196,31 @@ public final class BattlePassGui {
             inv.setItem(i, named(Material.PURPLE_STAINED_GLASS_PANE, " "));
         }
 
-        // ── Row 5 ─────────────────────────────────────────────────────────────
-        // Slot 45: BP Quests button
+        // ── Row 5 (slots 45-53): navigation + actions ─────────────────────────
+
+        // Slot 45: prev arrow
+        if (clampedPage > 0) {
+            inv.setItem(45, named(Material.ARROW, "§7◄ Назад"));
+        } else {
+            inv.setItem(45, named(Material.GRAY_STAINED_GLASS_PANE, "§7◄ Назад"));
+        }
+
+        // Slot 46-47: filler
+        ItemStack filler = named(Material.BLACK_STAINED_GLASS_PANE, " ");
+        inv.setItem(46, filler);
+        inv.setItem(47, filler.clone());
+
+        // Slot 48: Quests button
         ItemStack questsBtn = new ItemStack(Material.BOOK);
         ItemMeta qm = questsBtn.getItemMeta();
         qm.setDisplayName("§e§lЕжедневные квесты BP");
         List<String> ql = new ArrayList<>();
-        ql.add("§7Нажми для просмотра");
+        ql.add("§7Нажми для просмотра квестов");
         qm.setLore(ql);
         questsBtn.setItemMeta(qm);
-        inv.setItem(45, questsBtn);
+        inv.setItem(48, questsBtn);
 
-        // Slots 46-52: filler
-        ItemStack filler = named(Material.BLACK_STAINED_GLASS_PANE, " ");
-        for (int i = 46; i <= 52; i++) {
-            inv.setItem(i, filler);
-        }
-
-        // Slot 53: current level display
+        // Slot 49: current level display
         Material levelMat = (playerLevel >= 120) ? Material.NETHER_STAR : Material.GOLD_INGOT;
         ItemStack levelItem = new ItemStack(levelMat);
         ItemMeta lm = levelItem.getItemMeta();
@@ -231,7 +229,29 @@ public final class BattlePassGui {
         ll2.add("§7XP: §e" + data.getXp());
         lm.setLore(ll2);
         levelItem.setItemMeta(lm);
-        inv.setItem(53, levelItem);
+        inv.setItem(49, levelItem);
+
+        // Slot 50: Info book
+        ItemStack infoBook = new ItemStack(Material.KNOWLEDGE_BOOK);
+        ItemMeta im = infoBook.getItemMeta();
+        im.setDisplayName("§b§lИнструкция Battle Pass");
+        List<String> il = new ArrayList<>();
+        il.add("§7Нажми для получения инструкции");
+        il.add("§7по Battle Pass в чат");
+        im.setLore(il);
+        infoBook.setItemMeta(im);
+        inv.setItem(50, infoBook);
+
+        // Slot 51-52: filler
+        inv.setItem(51, filler.clone());
+        inv.setItem(52, filler.clone());
+
+        // Slot 53: next arrow
+        if (clampedPage < totalPages - 1) {
+            inv.setItem(53, named(Material.ARROW, "§7Вперёд ►"));
+        } else {
+            inv.setItem(53, named(Material.GRAY_STAINED_GLASS_PANE, "§7Вперёд ►"));
+        }
 
         player.openInventory(inv);
     }
@@ -264,7 +284,7 @@ public final class BattlePassGui {
             case MONEY -> lore.add("§6💰 " + (long) reward.getAmount() + " монет");
             case EXP -> lore.add("§a✨ " + (int) reward.getAmount() + " опыта");
             case ITEM -> lore.add("§b📦 " + reward.getDisplayName()
-                    + (reward.getCount() > 1 ? " ×" + reward.getCount() : ""));
+                    + (reward.getCount() > 1 ? "" : ""));
             case COMMAND -> lore.add("§d🎁 " + (reward.getDisplayName() != null ? reward.getDisplayName() : "Особая награда"));
         }
         if (claimed) lore.add("§a§lПолучено!");

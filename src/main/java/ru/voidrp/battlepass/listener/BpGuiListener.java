@@ -1,5 +1,10 @@
 package ru.voidrp.battlepass.listener;
 
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
+import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -54,7 +59,6 @@ public final class BpGuiListener implements Listener {
     @EventHandler
     public void onInventoryClose(InventoryCloseEvent event) {
         if (!(event.getPlayer() instanceof Player player)) return;
-        // Clean up page tracking when player closes the BP GUI
         String title = event.getView().getTitle();
         if (!title.startsWith("§6§l✦ Battle Pass")) {
             BattlePassGui.PLAYER_PAGE.remove(player.getUniqueId());
@@ -67,30 +71,46 @@ public final class BpGuiListener implements Listener {
         int totalPages = (int) Math.ceil(120.0 / LEVELS_PER_PAGE);
 
         switch (slot) {
-            case 0 -> {
-                // Prev page
+            // Premium badge — non-premium players get a clickable shop link
+            case 6, 7, 8 -> {
+                if (!premiumStorage.hasPremium(uuid)) {
+                    player.closeInventory();
+                    Component msg = Component.empty()
+                            .append(Component.text("✦ Premium Battle Pass: ", NamedTextColor.GOLD))
+                            .append(Component.text("[Купить на сайте]")
+                                    .color(NamedTextColor.YELLOW)
+                                    .decorate(TextDecoration.UNDERLINED)
+                                    .clickEvent(ClickEvent.openUrl("https://void-rp.ru/shop"))
+                                    .hoverEvent(HoverEvent.showText(
+                                            Component.text("Нажмите чтобы открыть магазин в браузере"))));
+                    player.sendMessage(msg);
+                }
+            }
+            // Prev page
+            case 45 -> {
                 if (page > 0) {
                     battlePassGui.open(player, page - 1);
                 }
             }
-            case 8 -> {
-                // Next page
+            // Quests button
+            case 48 -> questGui.open(player);
+            // Info book
+            case 50 -> sendBattlePassInfo(player);
+            // Next page
+            case 53 -> {
                 if (page < totalPages - 1) {
                     battlePassGui.open(player, page + 1);
                 }
             }
-            case 45 -> {
-                // Open quest GUI
-                questGui.open(player);
-            }
             default -> {
-                // Check free reward row (18-26) or premium reward row (27-35)
+                // Free reward row (18-26)
                 if (slot >= 18 && slot <= 26) {
                     int index = slot - 18;
                     int level = page * LEVELS_PER_PAGE + index + 1;
                     if (level >= 1 && level <= 120) {
                         tryClaimFree(player, level);
                     }
+                // Premium reward row (27-35)
                 } else if (slot >= 27 && slot <= 35) {
                     int index = slot - 27;
                     int level = page * LEVELS_PER_PAGE + index + 1;
@@ -100,6 +120,33 @@ public final class BpGuiListener implements Listener {
                 }
             }
         }
+    }
+
+    private void sendBattlePassInfo(Player player) {
+        player.sendMessage("§6§l══════════ Battle Pass — Инструкция ══════════");
+        player.sendMessage("§e§l📌 Источники XP:");
+        player.sendMessage("§7  • §aЕжедневный квест §8— §e600 XP");
+        player.sendMessage("§7  • §aБосс-квест §8— §e2000 XP");
+        player.sendMessage("§7  • §aКвест доставки §8— §e3000 XP");
+        player.sendMessage("§7  • §6Активности на сервере §8— §eразличное кол-во XP");
+        player.sendMessage(" ");
+        player.sendMessage("§b§l⭐ Преимущества Premium:");
+        player.sendMessage("§7  • §bВторая полоса наград §7на каждом уровне");
+        player.sendMessage("§7  • §bБольше монет §7и редкие предметы");
+        player.sendMessage("§7  • §bЭксклюзивные §7предметы из модов");
+        player.sendMessage("§7  • §bТотемы бессмертия §7и §bслитки незерита");
+        player.sendMessage(" ");
+
+        Component shopLink = Component.empty()
+                .append(Component.text("§6▶ Купить Premium: "))
+                .append(Component.text("[void-rp.ru/shop]")
+                        .color(NamedTextColor.YELLOW)
+                        .decorate(TextDecoration.UNDERLINED)
+                        .clickEvent(ClickEvent.openUrl("https://void-rp.ru/shop"))
+                        .hoverEvent(HoverEvent.showText(
+                                Component.text("Нажмите чтобы открыть магазин"))));
+        player.sendMessage(shopLink);
+        player.sendMessage("§6§l══════════════════════════════════════════════");
     }
 
     private void tryClaimFree(Player player, int level) {
