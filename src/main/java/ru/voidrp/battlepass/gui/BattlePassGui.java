@@ -227,6 +227,7 @@ public final class BattlePassGui {
         lm.setDisplayName("§6Уровень §e" + playerLevel + "§6/120");
         List<String> ll2 = new ArrayList<>();
         ll2.add("§7XP: §e" + data.getXp());
+        ll2.add("§7Страница: §e" + (clampedPage + 1) + "§7/§e" + totalPages);
         lm.setLore(ll2);
         levelItem.setItemMeta(lm);
         inv.setItem(49, levelItem);

@@ -174,7 +174,15 @@ public final class BpProgressListener implements Listener {
                 final int displayLvl = lvl;
                 Bukkit.getScheduler().runTask(
                         Bukkit.getPluginManager().getPlugin("VoidRpBattlePass"),
-                        () -> player.sendMessage("§6§l✦ §eБаттл Пасс: Уровень " + displayLvl + "! §6/bp для наград"));
+                        () -> {
+                            player.sendMessage("§6§l✦ §eБаттл Пасс: Уровень " + displayLvl + "! §6/bp для наград");
+                            if (displayLvl >= 120) {
+                                player.sendTitle("§6§l✦ УРОВЕНЬ МАКСИМУМ!", "§eBattle Pass — все награды доступны!", 10, 80, 20);
+                            } else {
+                                player.sendTitle("§6§l✦ Уровень " + displayLvl + "!", "§eBattle Pass — §7/bp для наград", 10, 60, 20);
+                            }
+                            spawnLevelUpFirework(player);
+                        });
             }
             // Push updated progress to backend
             if (backendClient != null && backendClient.isConfigured() && plugin != null) {
@@ -267,5 +275,22 @@ public final class BpProgressListener implements Listener {
                         + (reward.getDisplayName() != null ? reward.getDisplayName() : "Предмет") + "§d!");
             }
         }
+    }
+
+    private void spawnLevelUpFirework(Player player) {
+        org.bukkit.Location loc = player.getLocation().add(0, 1, 0);
+        org.bukkit.entity.Firework fw = (org.bukkit.entity.Firework)
+                loc.getWorld().spawnEntity(loc, org.bukkit.entity.EntityType.FIREWORK_ROCKET);
+        org.bukkit.inventory.meta.FireworkMeta meta = fw.getFireworkMeta();
+        meta.setPower(0);
+        meta.addEffect(org.bukkit.FireworkEffect.builder()
+                .with(org.bukkit.FireworkEffect.Type.BALL_LARGE)
+                .withColor(org.bukkit.Color.YELLOW, org.bukkit.Color.ORANGE)
+                .withFade(org.bukkit.Color.WHITE)
+                .flicker(true)
+                .trail(true)
+                .build());
+        fw.setFireworkMeta(meta);
+        fw.detonate();
     }
 }
