@@ -1,0 +1,8 @@
+reset-hour: 0
+
+battlepass-npc-names:
+  - "§6§lХранитель Сезона"
+
+# Backend integration (оставь пустым если не используется)
+backend-url: "https://api.void-rp.ru"
+game-auth-secret: ""

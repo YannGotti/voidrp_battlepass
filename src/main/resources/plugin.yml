@@ -1,0 +1,22 @@
+name: VoidRpBattlePass
+version: ${version}
+main: ru.voidrp.battlepass.BattlePassPlugin
+api-version: "1.21"
+softdepend:
+  - Vault
+  - LuckPerms
+  - VoidRpDailyQuests
+
+commands:
+  battlepass:
+    description: Открыть Battle Pass
+    aliases: [bp, баттлпасс]
+  bpadmin:
+    description: Администрирование Battle Pass
+    permission: voidrp.battlepass.admin
+
+permissions:
+  voidrp.battlepass.admin:
+    default: op
+  voidrp.battlepass.premium:
+    default: false
