@@ -16,6 +16,7 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.plugin.Plugin;
+import ru.voidrp.battlepass.data.BackendSyncClient;
 import ru.voidrp.battlepass.data.BattlePassData;
 import ru.voidrp.battlepass.data.BattlePassStorage;
 import ru.voidrp.battlepass.data.PremiumStorage;
@@ -57,6 +58,7 @@ public final class BpProgressListener implements Listener {
     private final SeasonRewards seasonRewards;
     private final Economy economy;
     private Plugin plugin;
+    private BackendSyncClient backendClient;
 
     public BpProgressListener(BattlePassStorage storage, PremiumStorage premiumStorage,
                                BpQuestStorage questStorage, SeasonRewards seasonRewards,
@@ -69,6 +71,7 @@ public final class BpProgressListener implements Listener {
     }
 
     public void setPlugin(Plugin plugin) { this.plugin = plugin; }
+    public void setBackendClient(BackendSyncClient client) { this.backendClient = client; }
 
     // ── Login / Quit ──────────────────────────────────────────────────────────
 
@@ -78,9 +81,10 @@ public final class BpProgressListener implements Listener {
         UUID uuid = player.getUniqueId();
         String name = player.getName();
         if (plugin == null) return;
-        // Sync premium from backend async so join isn't delayed
-        Bukkit.getScheduler().runTaskAsynchronously(plugin,
-                () -> premiumStorage.syncFromBackend(uuid, name));
+        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+            premiumStorage.syncFromBackend(uuid, name);
+            pushProgressAsync(uuid);
+        });
     }
 
     @EventHandler
@@ -172,7 +176,23 @@ public final class BpProgressListener implements Listener {
                         Bukkit.getPluginManager().getPlugin("VoidRpBattlePass"),
                         () -> player.sendMessage("§6§l✦ §eБаттл Пасс: Уровень " + displayLvl + "! §6/bp для наград"));
             }
+            // Push updated progress to backend
+            if (backendClient != null && backendClient.isConfigured() && plugin != null) {
+                final int finalLevel = newLevel;
+                final long finalXp = data.getXp();
+                final String nick = player.getName();
+                Bukkit.getScheduler().runTaskAsynchronously(plugin,
+                        () -> backendClient.pushProgress(uuid.toString(), nick, ru.voidrp.battlepass.season.Season.currentKey(), finalLevel, finalXp));
+            }
         }
+    }
+
+    private void pushProgressAsync(UUID uuid) {
+        if (backendClient == null || !backendClient.isConfigured()) return;
+        BattlePassData data = storage.get(uuid);
+        org.bukkit.OfflinePlayer op = Bukkit.getOfflinePlayer(uuid);
+        String nick = op.getName() != null ? op.getName() : uuid.toString();
+        backendClient.pushProgress(uuid.toString(), nick, ru.voidrp.battlepass.season.Season.currentKey(), data.getLevel(), data.getXp());
     }
 
     private void tickQuestProgress(Player player, BpQuestType type, String key, int amount) {

@@ -55,13 +55,15 @@ public final class BattlePassPlugin extends JavaPlugin {
         // ── Backend sync ──────────────────────────────────────────────────────
         String backendUrl  = getConfig().getString("backend-url", "");
         String authSecret  = getConfig().getString("game-auth-secret", "");
+        BackendSyncClient backendClient = null;
         if (!authSecret.isBlank()) {
-            BackendSyncClient backendClient = new BackendSyncClient(backendUrl, authSecret, getLogger());
+            backendClient = new BackendSyncClient(backendUrl, authSecret, getLogger());
             premiumStorage.setBackend(backendClient);
             getLogger().info("[BattlePass] Backend sync enabled: " + backendUrl);
         } else {
             getLogger().info("[BattlePass] Backend sync disabled (game-auth-secret not set).");
         }
+        final BackendSyncClient finalBackendClient = backendClient;
 
         // ── Vault ─────────────────────────────────────────────────────────────
         economy = setupEconomy();
@@ -77,6 +79,7 @@ public final class BattlePassPlugin extends JavaPlugin {
         BpProgressListener progressListener =
                 new BpProgressListener(storage, premiumStorage, questStorage, seasonRewards, economy);
         progressListener.setPlugin(this);
+        if (finalBackendClient != null) progressListener.setBackendClient(finalBackendClient);
 
         getServer().getPluginManager().registerEvents(progressListener, this);
         getServer().getPluginManager().registerEvents(

@@ -116,6 +116,34 @@ public final class BackendSyncClient {
         }
     }
 
+    /**
+     * Push player's current BP progress (level/xp/season) to the backend for profile display.
+     */
+    public void pushProgress(String minecraftUuid, String minecraftNickname, String season, int level, long xp) {
+        try {
+            JsonObject body = new JsonObject();
+            body.addProperty("minecraft_uuid", minecraftUuid);
+            body.addProperty("minecraft_nickname", minecraftNickname);
+            body.addProperty("season", season);
+            body.addProperty("level", level);
+            body.addProperty("xp", xp);
+
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(baseUrl + "/api/v1/battlepass/progress"))
+                    .header("Content-Type",       "application/json")
+                    .header("X-Game-Auth-Secret", gameAuthSecret)
+                    .timeout(TIMEOUT)
+                    .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
+                    .build();
+            HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+            if (resp.statusCode() != 200 && resp.statusCode() != 204) {
+                log.warning("[BattlePass] Backend progress push failed (" + resp.statusCode() + ") for " + minecraftUuid);
+            }
+        } catch (Exception e) {
+            log.warning("[BattlePass] Backend progress push error (" + minecraftUuid + "): " + e.getMessage());
+        }
+    }
+
     public boolean isConfigured() {
         return gameAuthSecret != null && !gameAuthSecret.isBlank();
     }
