@@ -20,6 +20,8 @@ import ru.voidrp.battlepass.season.Season;
 import ru.voidrp.battlepass.season.SeasonRewards;
 
 import java.io.File;
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 
 public final class BattlePassPlugin extends JavaPlugin {
@@ -37,6 +39,26 @@ public final class BattlePassPlugin extends JavaPlugin {
         // ── Data folder setup ─────────────────────────────────────────────────
         getDataFolder().mkdirs();
         saveDefaultConfig();
+
+        // ── Season dates ──────────────────────────────────────────────────────
+        String startStr = getConfig().getString("season-start", "");
+        String endStr   = getConfig().getString("season-end", "");
+        if (!startStr.isBlank() && !endStr.isBlank()) {
+            try {
+                LocalDate seasonStart = LocalDate.parse(startStr);
+                LocalDate seasonEnd   = LocalDate.parse(endStr);
+                if (seasonEnd.isBefore(seasonStart)) {
+                    getLogger().warning("[BattlePass] season-end is before season-start — dates ignored.");
+                } else {
+                    Season.configure(seasonStart, seasonEnd);
+                    getLogger().info("[BattlePass] Season dates: " + startStr + " → " + endStr);
+                }
+            } catch (DateTimeParseException e) {
+                getLogger().warning("[BattlePass] Invalid season date format (expected yyyy-MM-dd): " + e.getMessage());
+            }
+        } else {
+            getLogger().info("[BattlePass] season-start/season-end not set — using month-based season.");
+        }
 
         File seasonsDir  = new File(getDataFolder(), "seasons");
         File premiumDir  = new File(getDataFolder(), "premium");
@@ -90,8 +112,8 @@ public final class BattlePassPlugin extends JavaPlugin {
 
         // ── Commands ──────────────────────────────────────────────────────────
         BattlePassCommand cmd = new BattlePassCommand(battlePassGui, questGui, storage, premiumStorage, seasonRewards);
-        getCommand("battlepass").setExecutor(cmd);
-        getCommand("bpadmin").setExecutor(cmd);
+        reattachCommand("battlepass", cmd);
+        reattachCommand("bpadmin", cmd);
 
         // ── Hooks for voidrp_daily_quests ─────────────────────────────────────
         if (getServer().getPluginManager().getPlugin("VoidRpDailyQuests") != null) {
@@ -155,5 +177,31 @@ public final class BattlePassPlugin extends JavaPlugin {
         if (getServer().getPluginManager().getPlugin("Vault") == null) return null;
         RegisteredServiceProvider<Economy> rsp = getServer().getServicesManager().getRegistration(Economy.class);
         return rsp == null ? null : rsp.getProvider();
+    }
+
+    /**
+     * Re-attaches executor/tab-completer to an existing PluginCommand in the server's CommandMap,
+     * updating the owningPlugin reference so the command works after PlugMan hot-reload.
+     */
+    private void reattachCommand(String name, BattlePassCommand executor) {
+        org.bukkit.command.Command c = getServer().getCommandMap().getCommand(name);
+        if (c instanceof org.bukkit.command.PluginCommand pc) {
+            try {
+                java.lang.reflect.Field f = org.bukkit.command.PluginCommand.class.getDeclaredField("owningPlugin");
+                f.setAccessible(true);
+                f.set(pc, this);
+            } catch (Exception e) {
+                getLogger().warning("Could not reattach owningPlugin for /" + name + ": " + e.getMessage());
+            }
+            pc.setExecutor(executor);
+            pc.setTabCompleter(executor);
+        } else {
+            // First load — command not in map yet, use standard registration
+            org.bukkit.command.PluginCommand pc2 = getCommand(name);
+            if (pc2 != null) {
+                pc2.setExecutor(executor);
+                pc2.setTabCompleter(executor);
+            }
+        }
     }
 }

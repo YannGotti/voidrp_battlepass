@@ -4,6 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import ru.voidrp.battlepass.data.BattlePassData;
 import ru.voidrp.battlepass.data.BattlePassStorage;
@@ -16,9 +17,12 @@ import ru.voidrp.battlepass.season.SeasonRewards;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
-public final class BattlePassCommand implements CommandExecutor {
+public final class BattlePassCommand implements CommandExecutor, TabCompleter {
 
     private final BattlePassGui battlePassGui;
     private final BpQuestGui questGui;
@@ -265,6 +269,73 @@ public final class BattlePassCommand implements CommandExecutor {
         }
         storage.clearOldSeasonCache(Season.currentKey());
         sender.sendMessage("§aКэш данных старых сезонов очищен.");
+    }
+
+    // ── Tab completion ────────────────────────────────────────────────────────
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String label, String[] args) {
+        String cmdName = command.getName().toLowerCase();
+
+        if (cmdName.equals("battlepass") || cmdName.equals("bp") || cmdName.equals("баттлпасс")) {
+            if (args.length == 1) return filter(List.of("quests", "info"), args[0]);
+            return List.of();
+        }
+
+        if (cmdName.equals("bpadmin")) {
+            if (!sender.hasPermission("voidrp.battlepass.admin")) return List.of();
+
+            if (args.length == 1) {
+                return filter(List.of("premium", "xp", "level", "info", "season", "reload"), args[0]);
+            }
+
+            return switch (args[0].toLowerCase()) {
+                case "premium" -> {
+                    if (args.length == 2) yield filter(List.of("give", "remove"), args[1]);
+                    if (args.length == 3) yield onlinePlayers(args[2]);
+                    yield List.of();
+                }
+                case "xp" -> {
+                    if (args.length == 2) yield filter(List.of("give"), args[1]);
+                    if (args.length == 3) yield onlinePlayers(args[2]);
+                    if (args.length == 4) yield List.of("<количество>");
+                    yield List.of();
+                }
+                case "level" -> {
+                    if (args.length == 2) yield filter(List.of("set"), args[1]);
+                    if (args.length == 3) yield onlinePlayers(args[2]);
+                    if (args.length == 4) yield filter(List.of("1","10","20","30","40","50","60","70","80","90","100","110","120"), args[3]);
+                    yield List.of();
+                }
+                case "info" -> {
+                    if (args.length == 2) yield onlinePlayers(args[1]);
+                    yield List.of();
+                }
+                case "season" -> {
+                    if (args.length == 2) yield filter(List.of("reset"), args[1]);
+                    yield List.of();
+                }
+                default -> List.of();
+            };
+        }
+
+        return List.of();
+    }
+
+    private List<String> filter(List<String> options, String prefix) {
+        if (prefix.isEmpty()) return new ArrayList<>(options);
+        String lower = prefix.toLowerCase();
+        return options.stream()
+                .filter(s -> s.toLowerCase().startsWith(lower))
+                .collect(Collectors.toList());
+    }
+
+    private List<String> onlinePlayers(String prefix) {
+        String lower = prefix.toLowerCase();
+        return Bukkit.getOnlinePlayers().stream()
+                .map(Player::getName)
+                .filter(name -> name.toLowerCase().startsWith(lower))
+                .collect(Collectors.toList());
     }
 
     private void sendAdminHelp(CommandSender sender) {

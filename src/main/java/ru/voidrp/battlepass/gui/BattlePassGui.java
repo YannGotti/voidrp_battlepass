@@ -15,6 +15,7 @@ import ru.voidrp.battlepass.season.Season;
 import ru.voidrp.battlepass.season.SeasonRewards;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -72,7 +73,13 @@ public final class BattlePassGui {
         seasonMeta.setDisplayName("§6✦ " + seasonDisplayName);
         List<String> seasonLore = new ArrayList<>();
         seasonLore.add("§7Сезон: §e" + season);
-        seasonLore.add("§7До сброса: §e" + Season.daysUntilReset() + " §7дн.");
+        LocalDate endDate = Season.getEndDate();
+        if (endDate != null) {
+            seasonLore.add("§7До конца: §e" + Season.daysUntilReset() + " §7дн.");
+            seasonLore.add("§7Конец сезона: §e" + endDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy")));
+        } else {
+            seasonLore.add("§7До сброса: §e" + Season.daysUntilReset() + " §7дн.");
+        }
         seasonMeta.setLore(seasonLore);
         seasonItem.setItemMeta(seasonMeta);
         inv.setItem(0, seasonItem);
