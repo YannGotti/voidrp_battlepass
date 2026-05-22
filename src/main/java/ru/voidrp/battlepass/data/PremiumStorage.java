@@ -10,6 +10,7 @@ import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
@@ -56,25 +57,30 @@ public final class PremiumStorage {
     }
 
     public void grantPremium(UUID uuid, String nickname, int days, String note) {
-        long expires;
+        // Persist locally immediately so the server thread never blocks
+        long localExpiry = System.currentTimeMillis() + (long) days * 24 * 60 * 60 * 1000L;
+        cache.put(uuid, localExpiry);
+        saveToFile(uuid, localExpiry);
+
+        // Sync to backend async; update cache if backend returns a different expiry
         if (backend != null && backend.isConfigured()) {
-            long backendExpiry = backend.grantPremium(uuid.toString(), nickname, days, note);
-            // Use backend expiry if successful, otherwise calculate locally
-            expires = backendExpiry > 0 ? backendExpiry : System.currentTimeMillis() + (long) days * 24 * 60 * 60 * 1000L;
-        } else {
-            expires = System.currentTimeMillis() + (long) days * 24 * 60 * 60 * 1000L;
+            CompletableFuture.supplyAsync(() -> backend.grantPremium(uuid.toString(), nickname, days, note))
+                    .thenAccept(backendExpiry -> {
+                        if (backendExpiry > 0 && backendExpiry != localExpiry) {
+                            cache.put(uuid, backendExpiry);
+                            saveToFile(uuid, backendExpiry);
+                        }
+                    });
         }
-        cache.put(uuid, expires);
-        saveToFile(uuid, expires);
     }
 
-    /** Revoke premium. Calls backend if configured, then clears locally. */
+    /** Revoke premium. Clears locally immediately, notifies backend async. */
     public void revokePremium(UUID uuid) {
-        if (backend != null && backend.isConfigured()) {
-            backend.revokePremium(uuid.toString());
-        }
         cache.put(uuid, 0L);
         saveToFile(uuid, 0L);
+        if (backend != null && backend.isConfigured()) {
+            CompletableFuture.runAsync(() -> backend.revokePremium(uuid.toString()));
+        }
     }
 
     /** Returns expiry timestamp in millis, or 0 if no premium. Uses local cache/file. */
