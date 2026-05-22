@@ -82,6 +82,12 @@ public final class PremiumStorage {
         return cache.computeIfAbsent(uuid, this::loadFromFile);
     }
 
+    /** Directly set expiry (used by RCON sync from backend — no backend call). */
+    public void setExpiry(UUID uuid, long expiresAt) {
+        cache.put(uuid, expiresAt);
+        saveToFile(uuid, expiresAt);
+    }
+
     public void evict(UUID uuid) {
         cache.remove(uuid);
     }

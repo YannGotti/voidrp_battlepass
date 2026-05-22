@@ -160,7 +160,28 @@ public final class BattlePassCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage("§cPremium отозван у игрока §e" + targetName + "§c.");
                 if (target != null) target.sendMessage("§c✦ Ваш Premium Battle Pass был отозван.");
             }
-            default -> sender.sendMessage("§cИспользование: /bpadmin premium <give|remove> <игрок>");
+            case "sync" -> {
+                // Called by backend via RCON — only updates local cache, no backend call
+                if (args.length < 4) {
+                    sender.sendMessage("§cИспользование: /bpadmin premium sync <игрок> <expiry_ms>");
+                    return;
+                }
+                long expiryMs;
+                try {
+                    expiryMs = Long.parseLong(args[3]);
+                } catch (NumberFormatException e) {
+                    sender.sendMessage("§cНеверный timestamp: " + args[3]);
+                    return;
+                }
+                premiumStorage.setExpiry(targetUuid, expiryMs);
+                boolean nowHas = expiryMs > System.currentTimeMillis();
+                if (nowHas) {
+                    if (target != null) target.sendMessage("§b✦ §aВы получили §bPremium Battle Pass§a!");
+                } else {
+                    if (target != null) target.sendMessage("§c✦ Ваш Premium Battle Pass был отозван.");
+                }
+            }
+            default -> sender.sendMessage("§cИспользование: /bpadmin premium <give|remove|sync> <игрок>");
         }
     }
 
