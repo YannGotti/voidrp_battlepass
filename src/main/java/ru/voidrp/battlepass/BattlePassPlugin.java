@@ -109,6 +109,8 @@ public final class BattlePassPlugin extends JavaPlugin {
                 new BpGuiListener(battlePassGui, questGui, storage, premiumStorage, seasonRewards, progressListener), this);
         getServer().getPluginManager().registerEvents(
                 new BpNpcListener(battlePassGui, getConfig().getStringList("battlepass-npc-names")), this);
+        getServer().getPluginManager().registerEvents(
+                new ru.voidrp.battlepass.listener.TeleportProgressListener(this), this);
 
         // ── Commands ──────────────────────────────────────────────────────────
         BattlePassCommand cmd = new BattlePassCommand(battlePassGui, questGui, storage, premiumStorage, seasonRewards);
