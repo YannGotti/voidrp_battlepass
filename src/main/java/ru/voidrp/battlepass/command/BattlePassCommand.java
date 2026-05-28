@@ -6,6 +6,8 @@ import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
+import ru.voidrp.battlepass.data.BackendSyncClient;
 import ru.voidrp.battlepass.data.BattlePassData;
 import ru.voidrp.battlepass.data.BattlePassStorage;
 import ru.voidrp.battlepass.data.PremiumStorage;
@@ -29,6 +31,11 @@ public final class BattlePassCommand implements CommandExecutor, TabCompleter {
     private final BattlePassStorage storage;
     private final PremiumStorage premiumStorage;
     private final SeasonRewards seasonRewards;
+    private BackendSyncClient backendClient;
+    private Plugin plugin;
+
+    public void setBackendClient(BackendSyncClient client) { this.backendClient = client; }
+    public void setPlugin(Plugin plugin) { this.plugin = plugin; }
 
     public BattlePassCommand(BattlePassGui battlePassGui, BpQuestGui questGui,
                               BattlePassStorage storage, PremiumStorage premiumStorage,
@@ -93,8 +100,8 @@ public final class BattlePassCommand implements CommandExecutor, TabCompleter {
         }
         sender.sendMessage("§6§l✦ Battle Pass — §e" + name);
         sender.sendMessage("§7Сезон: §e" + Season.currentKey());
-        sender.sendMessage("§7Уровень: §e" + level + "§7/120");
-        sender.sendMessage("§7XP: §e" + xp + (level < 120 ? " §7(до сл. уровня: §e" + toNext + "§7)" : ""));
+        sender.sendMessage("§7Уровень: §e" + level + "§7/1000");
+        sender.sendMessage("§7XP: §e" + xp + (level < 1000 ? " §7(до сл. уровня: §e" + toNext + "§7)" : ""));
         sender.sendMessage("§7Premium: " + premiumStatus);
     }
 
@@ -121,6 +128,7 @@ public final class BattlePassCommand implements CommandExecutor, TabCompleter {
                 seasonRewards.reload();
                 sender.sendMessage("§aRewards перезагружены.");
             }
+            case "syncbackend" -> handleSyncBackend(sender, args);
             default -> sendAdminHelp(sender);
         }
         return true;
@@ -254,7 +262,7 @@ public final class BattlePassCommand implements CommandExecutor, TabCompleter {
         }
         storage.setLevel(targetUuid, level);
         storage.save(targetUuid);
-        int clamped = Math.max(1, Math.min(120, level));
+        int clamped = Math.max(1, Math.min(1000, level));
         sender.sendMessage("§aУровень игрока §e" + targetName + " §aустановлен на §e" + clamped + "§a.");
         if (target != null) target.sendMessage("§6§l✦ §eВаш уровень Battle Pass установлен на §e" + clamped + "§6!");
     }
@@ -307,7 +315,7 @@ public final class BattlePassCommand implements CommandExecutor, TabCompleter {
             if (!sender.hasPermission("voidrp.battlepass.admin")) return List.of();
 
             if (args.length == 1) {
-                return filter(List.of("premium", "xp", "level", "info", "season", "reload"), args[0]);
+                return filter(List.of("premium", "xp", "level", "info", "season", "reload", "syncbackend"), args[0]);
             }
 
             return switch (args[0].toLowerCase()) {
@@ -325,7 +333,7 @@ public final class BattlePassCommand implements CommandExecutor, TabCompleter {
                 case "level" -> {
                     if (args.length == 2) yield filter(List.of("set"), args[1]);
                     if (args.length == 3) yield onlinePlayers(args[2]);
-                    if (args.length == 4) yield filter(List.of("1","10","20","30","40","50","60","70","80","90","100","110","120"), args[3]);
+                    if (args.length == 4) yield filter(List.of("1","100","200","300","400","500","600","700","800","900","1000"), args[3]);
                     yield List.of();
                 }
                 case "info" -> {
@@ -334,6 +342,14 @@ public final class BattlePassCommand implements CommandExecutor, TabCompleter {
                 }
                 case "season" -> {
                     if (args.length == 2) yield filter(List.of("reset"), args[1]);
+                    yield List.of();
+                }
+                case "syncbackend" -> {
+                    if (args.length == 2) {
+                        List<String> opts = new ArrayList<>(List.of("all"));
+                        opts.addAll(onlinePlayers(args[1]));
+                        yield filter(opts, args[1]);
+                    }
                     yield List.of();
                 }
                 default -> List.of();
@@ -359,6 +375,57 @@ public final class BattlePassCommand implements CommandExecutor, TabCompleter {
                 .collect(Collectors.toList());
     }
 
+    private void handleSyncBackend(CommandSender sender, String[] args) {
+        if (backendClient == null || !backendClient.isConfigured()) {
+            sender.sendMessage("§cBackend не настроен — синк недоступен.");
+            return;
+        }
+        if (plugin == null) {
+            sender.sendMessage("§cPlugin не инициализирован.");
+            return;
+        }
+
+        if (args.length >= 2 && !args[1].equalsIgnoreCase("all")) {
+            // Sync one player
+            String name = args[1];
+            @SuppressWarnings("deprecation")
+            var offline = Bukkit.getOfflinePlayer(name);
+            if (offline.getUniqueId() == null) {
+                sender.sendMessage("§cИгрок §e" + name + " §cне найден.");
+                return;
+            }
+            UUID uuid = offline.getUniqueId();
+            String nick = offline.getName() != null ? offline.getName() : name;
+            BattlePassData data = storage.get(uuid);
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                backendClient.pushProgress(uuid.toString(), nick, Season.currentKey(), data.getLevel(), data.getXp());
+                Bukkit.getScheduler().runTask(plugin, () ->
+                    sender.sendMessage("§aСинк отправлен: §e" + nick + " §7— уровень §e" + data.getLevel() + " §7(§e" + data.getXp() + " XP§7)")
+                );
+            });
+        } else {
+            // Sync all online players
+            var online = Bukkit.getOnlinePlayers();
+            if (online.isEmpty()) {
+                sender.sendMessage("§7Нет онлайн-игроков для синка.");
+                return;
+            }
+            sender.sendMessage("§7Запускаю синк §e" + online.size() + " §7игроков...");
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
+                int count = 0;
+                for (Player p : online) {
+                    BattlePassData data = storage.get(p.getUniqueId());
+                    backendClient.pushProgress(p.getUniqueId().toString(), p.getName(), Season.currentKey(), data.getLevel(), data.getXp());
+                    count++;
+                }
+                final int total = count;
+                Bukkit.getScheduler().runTask(plugin, () ->
+                    sender.sendMessage("§aСинк завершён для §e" + total + " §aигроков.")
+                );
+            });
+        }
+    }
+
     private void sendAdminHelp(CommandSender sender) {
         sender.sendMessage("§6§lBattle Pass Admin:");
         sender.sendMessage("§e/bpadmin premium give <игрок>");
@@ -368,5 +435,6 @@ public final class BattlePassCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage("§e/bpadmin info <игрок>");
         sender.sendMessage("§e/bpadmin season reset");
         sender.sendMessage("§e/bpadmin reload");
+        sender.sendMessage("§e/bpadmin syncbackend [игрок|all]");
     }
 }

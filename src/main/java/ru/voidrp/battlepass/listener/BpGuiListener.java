@@ -60,7 +60,7 @@ public final class BpGuiListener implements Listener {
     public void onInventoryClose(InventoryCloseEvent event) {
         if (!(event.getPlayer() instanceof Player player)) return;
         String title = event.getView().getTitle();
-        if (!title.startsWith("§6§l✦ Battle Pass")) {
+        if (title.startsWith("§6§l✦ Battle Pass")) {
             BattlePassGui.PLAYER_PAGE.remove(player.getUniqueId());
         }
     }
@@ -68,7 +68,7 @@ public final class BpGuiListener implements Listener {
     private void handleBattlePassClick(Player player, int slot) {
         UUID uuid = player.getUniqueId();
         int page = BattlePassGui.PLAYER_PAGE.getOrDefault(uuid, 0);
-        int totalPages = (int) Math.ceil(120.0 / LEVELS_PER_PAGE);
+        int totalPages = (int) Math.ceil(1000.0 / LEVELS_PER_PAGE);
 
         switch (slot) {
             // Premium badge — non-premium players get a clickable shop link
@@ -107,14 +107,14 @@ public final class BpGuiListener implements Listener {
                 if (slot >= 18 && slot <= 26) {
                     int index = slot - 18;
                     int level = page * LEVELS_PER_PAGE + index + 1;
-                    if (level >= 1 && level <= 120) {
+                    if (level >= 1 && level <= 1000) {
                         tryClaimFree(player, level);
                     }
                 // Premium reward row (27-35)
                 } else if (slot >= 27 && slot <= 35) {
                     int index = slot - 27;
                     int level = page * LEVELS_PER_PAGE + index + 1;
-                    if (level >= 1 && level <= 120) {
+                    if (level >= 1 && level <= 1000) {
                         tryClaimPremium(player, level);
                     }
                 }

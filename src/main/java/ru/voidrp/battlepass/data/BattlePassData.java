@@ -5,7 +5,7 @@ import java.util.Set;
 
 public final class BattlePassData {
 
-    private static final int MAX_LEVEL = 120;
+    private static final int MAX_LEVEL = 1000;
     private static final long XP_PER_LEVEL = 1000L;
 
     private String season;
@@ -35,13 +35,13 @@ public final class BattlePassData {
         this.xp = Math.max(0, xp);
     }
 
-    /** Adds XP and returns the new level (1-120). */
+    /** Adds XP and returns the new level (1-1000). */
     public int addXp(long amount) {
         this.xp += amount;
         return getLevel();
     }
 
-    /** Returns current level 1-120 derived from XP. */
+    /** Returns current level 1-1000 derived from XP. */
     public int getLevel() {
         int level = (int) (xp / XP_PER_LEVEL) + 1;
         return Math.min(level, MAX_LEVEL);

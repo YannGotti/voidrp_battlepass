@@ -112,8 +112,33 @@ public final class BattlePassPlugin extends JavaPlugin {
 
         // ── Commands ──────────────────────────────────────────────────────────
         BattlePassCommand cmd = new BattlePassCommand(battlePassGui, questGui, storage, premiumStorage, seasonRewards);
-        reattachCommand("battlepass", cmd);
-        reattachCommand("bpadmin", cmd);
+        cmd.setPlugin(this);
+        cmd.setBackendClient(finalBackendClient);
+        attachProxy("battlepass", cmd);
+        attachProxy("bp", cmd);
+        attachProxy("баттлпасс", cmd);
+        attachProxy("bpadmin", cmd);
+
+        // Rebuild Paper's brigadier dispatcher so PlugMan hot-reload works.
+        // Without this, the old BukkitCommandNode still holds a reference to
+        // the previous (disabled) PluginCommand and throws "plugin is disabled".
+        try {
+            getServer().getClass().getMethod("syncCommands").invoke(getServer());
+            getLogger().info("[BattlePass] syncCommands() called — brigadier tree rebuilt.");
+        } catch (Exception e) {
+            getLogger().warning("[BattlePass] syncCommands() failed: " + e.getMessage());
+        }
+
+        // ── Periodic backend sync (every 10 min) ──────────────────────────────
+        if (finalBackendClient != null) {
+            long periodTicks = 20L * 60 * 10; // 10 minutes
+            getServer().getScheduler().runTaskTimerAsynchronously(this, () -> {
+                for (org.bukkit.entity.Player p : getServer().getOnlinePlayers()) {
+                    ru.voidrp.battlepass.data.BattlePassData d = storage.get(p.getUniqueId());
+                    finalBackendClient.pushProgress(p.getUniqueId().toString(), p.getName(), Season.currentKey(), d.getLevel(), d.getXp());
+                }
+            }, periodTicks, periodTicks);
+        }
 
         // ── Hooks for voidrp_daily_quests ─────────────────────────────────────
         if (getServer().getPluginManager().getPlugin("VoidRpDailyQuests") != null) {
@@ -180,27 +205,92 @@ public final class BattlePassPlugin extends JavaPlugin {
     }
 
     /**
-     * Re-attaches executor/tab-completer to an existing PluginCommand in the server's CommandMap,
-     * updating the owningPlugin reference so the command works after PlugMan hot-reload.
+     * Injects a long-lived BpProxyCommand (plain Command, no owningPlugin check) into
+     * knownCommands under the given name. On PlugMan hot-reload the proxy object survives
+     * in the CommandMap; we locate it by class name (cross-classloader string comparison)
+     * and update only its executor reference via reflection — no owningPlugin patching needed.
      */
-    private void reattachCommand(String name, BattlePassCommand executor) {
-        org.bukkit.command.Command c = getServer().getCommandMap().getCommand(name);
-        if (c instanceof org.bukkit.command.PluginCommand pc) {
-            try {
-                java.lang.reflect.Field f = org.bukkit.command.PluginCommand.class.getDeclaredField("owningPlugin");
-                f.setAccessible(true);
-                f.set(pc, this);
-            } catch (Exception e) {
-                getLogger().warning("Could not reattach owningPlugin for /" + name + ": " + e.getMessage());
+    @SuppressWarnings("unchecked")
+    private void attachProxy(String name, BattlePassCommand executor) {
+        try {
+            java.lang.reflect.Field kf = findKnownCommandsField(getServer().getCommandMap().getClass());
+            kf.setAccessible(true);
+            var known = (java.util.Map<String, org.bukkit.command.Command>) kf.get(getServer().getCommandMap());
+
+            var existing = known.get(name);
+
+            // Reload path: proxy from a previous classloader load is still in the map.
+            // We can't cast across classloader boundary, but we can invoke update() by name.
+            if (existing != null && existing.getClass().getName().equals(
+                    "ru.voidrp.battlepass.BattlePassPlugin$BpProxyCommand")) {
+                existing.getClass()
+                        .getMethod("update",
+                                org.bukkit.command.CommandExecutor.class,
+                                org.bukkit.command.TabCompleter.class)
+                        .invoke(existing, executor, executor);
+                getLogger().info("[BattlePass] Updated proxy /" + name + " (PlugMan reload).");
+                return;
             }
-            pc.setExecutor(executor);
-            pc.setTabCompleter(executor);
-        } else {
-            // First load — command not in map yet, use standard registration
-            org.bukkit.command.PluginCommand pc2 = getCommand(name);
-            if (pc2 != null) {
-                pc2.setExecutor(executor);
-                pc2.setTabCompleter(executor);
+
+            // First load (or proxy was somehow lost) — create and inject a fresh proxy.
+            BpProxyCommand proxy = new BpProxyCommand(name);
+            proxy.update(executor, executor);
+            known.put(name, proxy);
+            known.put("voidrpbattlepass:" + name, proxy);
+            getLogger().info("[BattlePass] Registered proxy /" + name + ".");
+
+        } catch (Exception e) {
+            getLogger().warning("[BattlePass] attachProxy failed for /" + name + ": " + e.getMessage());
+        }
+    }
+
+    private static java.lang.reflect.Field findKnownCommandsField(Class<?> cls) throws NoSuchFieldException {
+        for (Class<?> c = cls; c != null; c = c.getSuperclass()) {
+            try { return c.getDeclaredField("knownCommands"); } catch (NoSuchFieldException ignored) {}
+        }
+        throw new NoSuchFieldException("knownCommands not found in hierarchy of " + cls.getName());
+    }
+
+    /**
+     * A plain Command (not PluginCommand) that delegates to a hot-swappable executor.
+     * Because it does not extend PluginCommand there is no owningPlugin.isEnabled() guard —
+     * making it safe to keep permanently in the CommandMap across PlugMan reloads.
+     */
+    private static final class BpProxyCommand extends org.bukkit.command.Command {
+
+        private volatile org.bukkit.command.CommandExecutor executor;
+        private volatile org.bukkit.command.TabCompleter completer;
+
+        BpProxyCommand(String name) {
+            super(name);
+            setDescription("VoidRp Battle Pass");
+            setUsage("/" + name);
+        }
+
+        public void update(org.bukkit.command.CommandExecutor exec, org.bukkit.command.TabCompleter comp) {
+            this.executor = exec;
+            this.completer = comp;
+        }
+
+        @Override
+        public boolean execute(org.bukkit.command.CommandSender sender, String label, String[] args) {
+            if (executor == null) return false;
+            try {
+                return executor.onCommand(sender, this, label, args);
+            } catch (Exception e) {
+                sender.sendMessage("§cОшибка при выполнении команды.");
+                return false;
+            }
+        }
+
+        @Override
+        public java.util.List<String> tabComplete(org.bukkit.command.CommandSender sender, String alias, String[] args) {
+            if (completer == null) return java.util.List.of();
+            try {
+                java.util.List<String> result = completer.onTabComplete(sender, this, alias, args);
+                return result != null ? result : java.util.List.of();
+            } catch (Exception e) {
+                return java.util.List.of();
             }
         }
     }

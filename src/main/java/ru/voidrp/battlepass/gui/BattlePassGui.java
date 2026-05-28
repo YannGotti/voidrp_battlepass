@@ -26,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class BattlePassGui {
 
     private static final int LEVELS_PER_PAGE = 9;
-    private static final int TOTAL_LEVELS = 120;
+    private static final int TOTAL_LEVELS = 1000;
 
     /** Tracks which page each player currently has open. */
     public static final ConcurrentHashMap<UUID, Integer> PLAYER_PAGE = new ConcurrentHashMap<>();
@@ -47,7 +47,9 @@ public final class BattlePassGui {
     }
 
     public void open(Player player) {
-        int page = PLAYER_PAGE.getOrDefault(player.getUniqueId(), 0);
+        BattlePassData data = storage.get(player.getUniqueId());
+        int levelPage = Math.max(0, (data.getLevel() - 1) / LEVELS_PER_PAGE);
+        int page = PLAYER_PAGE.getOrDefault(player.getUniqueId(), levelPage);
         open(player, page);
     }
 
@@ -59,7 +61,6 @@ public final class BattlePassGui {
         boolean hasPremium = premiumStorage.hasPremium(player.getUniqueId());
         int totalPages = (int) Math.ceil((double) TOTAL_LEVELS / LEVELS_PER_PAGE);
         int clampedPage = Math.max(0, Math.min(page, totalPages - 1));
-        PLAYER_PAGE.put(player.getUniqueId(), clampedPage);
 
         int firstLevel = clampedPage * LEVELS_PER_PAGE + 1;
         int lastLevel = Math.min(firstLevel + LEVELS_PER_PAGE - 1, TOTAL_LEVELS);
@@ -95,8 +96,8 @@ public final class BattlePassGui {
         xpMeta.setDisplayName("§aОпыт Battle Pass");
         List<String> xpLore = new ArrayList<>();
         xpLore.add("§7Всего XP: §e" + data.getXp());
-        xpLore.add("§7Уровень: §e" + level + "§7/§e120");
-        if (level < 120) {
+        xpLore.add("§7Уровень: §e" + level + "§7/§e1000");
+        if (level < 1000) {
             xpLore.add("§7Прогресс: §e" + xpInLevel + "§7/§e1000 XP");
             xpLore.add("§7До следующего: §e" + toNext + " XP");
         } else {
@@ -228,10 +229,10 @@ public final class BattlePassGui {
         inv.setItem(48, questsBtn);
 
         // Slot 49: current level display
-        Material levelMat = (playerLevel >= 120) ? Material.NETHER_STAR : Material.GOLD_INGOT;
+        Material levelMat = (playerLevel >= 1000) ? Material.NETHER_STAR : Material.GOLD_INGOT;
         ItemStack levelItem = new ItemStack(levelMat);
         ItemMeta lm = levelItem.getItemMeta();
-        lm.setDisplayName("§6Уровень §e" + playerLevel + "§6/120");
+        lm.setDisplayName("§6Уровень §e" + playerLevel + "§6/1000");
         List<String> ll2 = new ArrayList<>();
         ll2.add("§7XP: §e" + data.getXp());
         ll2.add("§7Страница: §e" + (clampedPage + 1) + "§7/§e" + totalPages);
@@ -262,6 +263,7 @@ public final class BattlePassGui {
         }
 
         player.openInventory(inv);
+        PLAYER_PAGE.put(player.getUniqueId(), clampedPage);
     }
 
     private ItemStack buildRewardItem(BpReward reward, int level, boolean reachable, boolean claimed, boolean isPremium) {

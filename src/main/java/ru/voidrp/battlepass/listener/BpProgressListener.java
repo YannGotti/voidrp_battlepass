@@ -176,7 +176,7 @@ public final class BpProgressListener implements Listener {
                         Bukkit.getPluginManager().getPlugin("VoidRpBattlePass"),
                         () -> {
                             player.sendMessage("§6§l✦ §eБаттл Пасс: Уровень " + displayLvl + "! §6/bp для наград");
-                            if (displayLvl >= 120) {
+                            if (displayLvl >= 1000) {
                                 player.sendTitle("§6§l✦ УРОВЕНЬ МАКСИМУМ!", "§eBattle Pass — все награды доступны!", 10, 80, 20);
                             } else {
                                 player.sendTitle("§6§l✦ Уровень " + displayLvl + "!", "§eBattle Pass — §7/bp для наград", 10, 60, 20);
@@ -260,16 +260,21 @@ public final class BpProgressListener implements Listener {
                 try {
                     mat = org.bukkit.Material.valueOf(reward.getMaterial().toUpperCase());
                 } catch (IllegalArgumentException e) {
+                    plugin.getLogger().warning("[BattlePass] Unknown material '" + reward.getMaterial() + "' — giving PAPER instead.");
                     mat = org.bukkit.Material.PAPER;
                 }
                 org.bukkit.inventory.ItemStack item = new org.bukkit.inventory.ItemStack(mat, Math.max(1, reward.getCount()));
-                player.getInventory().addItem(item);
+                var leftover = player.getInventory().addItem(item);
+                if (!leftover.isEmpty()) {
+                    leftover.values().forEach(drop -> player.getWorld().dropItemNaturally(player.getLocation(), drop));
+                    player.sendMessage("§e⚠ Инвентарь полон — предмет выброшен рядом с тобой!");
+                }
                 player.sendMessage("§b📦 Получено: §f" + (reward.getDisplayName() != null ? reward.getDisplayName() : mat.name()) + "§b!");
             }
             case COMMAND -> {
                 String cmd = reward.getCommand().replace("{player}", player.getName());
-                // Strip leading slash if present
                 if (cmd.startsWith("/")) cmd = cmd.substring(1);
+                plugin.getLogger().info("[BattlePass] Reward command for " + player.getName() + ": " + cmd);
                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), cmd);
                 player.sendMessage("§d🎁 Получена особая награда: §f"
                         + (reward.getDisplayName() != null ? reward.getDisplayName() : "Предмет") + "§d!");

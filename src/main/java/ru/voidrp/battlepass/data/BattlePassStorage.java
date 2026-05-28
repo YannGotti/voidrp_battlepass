@@ -52,7 +52,7 @@ public final class BattlePassStorage {
     /** Sets xp to (level-1)*1000, clamped. */
     public void setLevel(UUID uuid, int level) {
         BattlePassData data = get(uuid);
-        int clamped = Math.max(1, Math.min(120, level));
+        int clamped = Math.max(1, Math.min(1000, level));
         data.setXp((long) (clamped - 1) * 1000L);
     }
 
